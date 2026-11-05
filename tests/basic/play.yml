@@ -1,0 +1,50 @@
+- name: controller-only features
+  hosts: all
+  gather_facts: false
+  vars:
+    greeting: "hello from {{ inventory_hostname }}"
+  tasks:
+    - name: debug per host
+      debug:
+        msg: "{{ greeting }} in {{ group_names | join(',') }} env={{ env_name }}"
+
+    - name: set a fact
+      set_fact:
+        squared: "{{ (inventory_hostname[-1] | int) ** 2 }}"
+
+    - name: loop
+      debug:
+        msg: "item {{ item }}"
+      loop: [1, 2, 3]
+      when: inventory_hostname == 'web1'
+
+    - name: assert facts are per host (worker isolation)
+      assert:
+        that:
+          - squared | int == (inventory_hostname[-1] | int) ** 2
+
+    - name: lookup file and template
+      debug:
+        msg: "{{ lookup('file', 'inventory.ini').splitlines()[0] }} / {{ lookup('template', 't.j2') | trim }}"
+      run_once: true
+
+    - name: block / rescue
+      block:
+        - fail:
+            msg: boom
+          when: inventory_hostname == 'db2'
+      rescue:
+        - debug:
+            msg: "rescued {{ ansible_failed_result.msg }}"
+
+    - name: include tasks
+      include_tasks: inc.yml
+      when: "'db' in group_names"
+
+- name: second play uses facts from first
+  hosts: web
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: "{{ hostvars['db1'].squared }}"
+      run_once: true

@@ -1,0 +1,108 @@
+- name: winsible end-to-end test (changes only under /tmp/winsible_test)
+  hosts: linux
+  gather_facts: true
+  vars:
+    root: /tmp/winsible_test
+    controller_os: "{{ lookup('pipe', 'ver') | default('windows', true) | trim }}"
+  tasks:
+    - name: facts gathered
+      debug:
+        msg: "{{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} kernel={{ ansible_facts.kernel }} py={{ ansible_facts.python_version }}"
+
+    - name: ping module
+      ping:
+
+    - name: make test dir
+      file: {path: "{{ root }}", state: directory, mode: "0750"}
+
+    - name: command module
+      command: uname -sr
+      register: un
+      changed_when: false
+
+    - name: shell module with pipe
+      shell: echo "{{ un.stdout }}" | tr a-z A-Z
+      register: sh
+      changed_when: false
+
+    - name: copy inline content
+      copy: {dest: "{{ root }}/inline.txt", content: "line1\nline2\n", mode: "0640"}
+      register: c1
+
+    - name: copy file from controller
+      copy: {src: files/hello.txt, dest: "{{ root }}/hello.txt"}
+
+    - name: copy is idempotent
+      copy: {src: files/hello.txt, dest: "{{ root }}/hello.txt"}
+      register: c2
+      failed_when: c2.changed
+
+    - name: template
+      template: {src: files/app.conf.j2, dest: "{{ root }}/app.conf"}
+
+    - name: lineinfile
+      lineinfile: {path: "{{ root }}/app.conf", line: "added=by_lineinfile"}
+
+    - name: stat
+      stat: {path: "{{ root }}/app.conf", checksum_algorithm: sha256}
+      register: st
+
+    - name: slurp
+      slurp: {src: "{{ root }}/app.conf"}
+      register: sl
+
+    - name: fetch back to controller
+      fetch: {src: "{{ root }}/app.conf", dest: "out/", flat: false}
+
+    - name: script module
+      script: files/probe.sh one two
+      register: sc
+
+    - name: raw module
+      raw: echo raw-ok
+      register: rw
+      changed_when: false
+
+    - name: loop with register
+      command: "echo {{ item }}"
+      loop: [a, b, c]
+      register: lp
+      changed_when: false
+
+    - name: async + poll
+      shell: sleep 2; echo async-done
+      async: 30
+      poll: 1
+      register: asy
+
+    - name: task timeout is enforced
+      command: sleep 20
+      timeout: 3
+      register: to
+      ignore_errors: true
+
+    - name: pipelining on
+      command: echo piped
+      vars: {ansible_pipelining: true}
+      register: pp
+      changed_when: false
+
+    - name: check results
+      assert:
+        that:
+          - un.stdout is search('Linux')
+          - sh.stdout == un.stdout | upper
+          - c1.changed
+          - st.stat.exists and st.stat.size > 0
+          - (sl.content | b64decode) is search('added=by_lineinfile')
+          - (sl.content | b64decode) is search('host=' ~ inventory_hostname)
+          - sc.stdout is search('script ran on .* args=one two')
+          - rw.stdout | trim == 'raw-ok'
+          - lp.results | map(attribute='stdout') | list == ['a','b','c']
+          - asy.stdout == 'async-done'
+          - to is failed and to.msg is search('[Tt]imed out|expected time frame')
+          - pp.stdout == 'piped'
+          - lookup('file', 'out/' ~ inventory_hostname ~ root ~ '/app.conf') is search('added=by_lineinfile')
+
+    - name: cleanup
+      file: {path: "{{ root }}", state: absent}

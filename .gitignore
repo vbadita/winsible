@@ -1,0 +1,7 @@
+.venv*/
+__pycache__/
+*.pyc
+# real test inventories hold your hosts/users/keys: copy the *.example.ini files
+tests/remote/inventory.ini
+tests/remote/parallel.ini
+tests/remote/out/

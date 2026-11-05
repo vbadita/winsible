@@ -1,0 +1,52 @@
+# become test (sudo or su). Touches only /tmp/winsible_become*, removes them at the end.
+#   ansible-playbook -i inventory.ini become.yml -K                       # sudo
+#   ansible-playbook -i inventory.ini become.yml -K --become-method su   # su, root password
+- name: become over the winsible ssh connection
+  hosts: linux
+  gather_facts: false
+  tasks:
+    - name: become with pipelining (default; su never pipelines)
+      become: true
+      command: id -u
+      register: piped
+      changed_when: false
+
+    - name: become without pipelining (temp files)
+      become: true
+      command: id -u
+      register: unpiped
+      changed_when: false
+      vars:
+        ansible_pipelining: false
+
+    - name: become copy module creates a root-owned file in /tmp
+      become: true
+      copy:
+        dest: /tmp/winsible_become.txt
+        content: "made by root\n"
+        mode: "0644"
+
+    - name: stat it as the normal user
+      stat:
+        path: /tmp/winsible_become.txt
+      register: st
+
+    - name: become shell
+      become: true
+      shell: whoami && test -w /root
+      register: who
+      changed_when: false
+
+    - name: check results
+      assert:
+        that:
+          - piped.stdout == "0"
+          - unpiped.stdout == "0"
+          - st.stat.exists and st.stat.pw_name == "root"
+          - who.stdout_lines[0] == "root"
+
+    - name: cleanup
+      become: true
+      file:
+        path: /tmp/winsible_become.txt
+        state: absent

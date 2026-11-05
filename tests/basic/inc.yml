@@ -1,0 +1,2 @@
+- debug:
+    msg: "included on {{ inventory_hostname }} role={{ role }}"

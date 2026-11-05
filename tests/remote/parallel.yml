@@ -1,0 +1,9 @@
+- hosts: par
+  gather_facts: false
+  tasks:
+    - copy: {dest: "/tmp/winsible_par_{{ inventory_hostname }}.txt", content: "I am {{ inventory_hostname }}\n"}
+    - command: "cat /tmp/winsible_par_{{ inventory_hostname }}.txt"
+      register: r
+      changed_when: false
+    - assert: {that: ["r.stdout == 'I am ' ~ inventory_hostname"]}
+    - file: {path: "/tmp/winsible_par_{{ inventory_hostname }}.txt", state: absent}

@@ -1,0 +1,4 @@
+# managed by winsible test
+host={{ inventory_hostname }}
+distro={{ ansible_facts.distribution | default('?') }} {{ ansible_facts.distribution_version | default('') }}
+controller={{ controller_os }}
